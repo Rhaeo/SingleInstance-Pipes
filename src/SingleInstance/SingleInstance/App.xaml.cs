@@ -16,6 +16,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using log4net;
+using log4net.Appender;
+using log4net.Config;
 
 namespace SingleInstance
 {
@@ -64,12 +66,13 @@ namespace SingleInstance
     {
       AppDomain.CurrentDomain.UnhandledException += (sender, e2) =>
       {
+        log.Error("Unhandled eception.", (Exception)e2.ExceptionObject);
         var halt = true;
       };
 
       if (TryAcquireMutex())
       {
-        Debug.WriteLine("I am the server.");
+        this.log.InfoFormat("Process #{0} is the server.", Process.GetCurrentProcess().Id);
 
         // Use the constructor instead of the Run static method or variable assignment to avoid ReSharper await suggestion. In this case the task is not to be awaited as 
         new Task(async () =>
@@ -80,7 +83,7 @@ namespace SingleInstance
       }
       else
       {
-        Debug.WriteLine("I am the client.");
+        this.log.InfoFormat("Process #{0} is the client.", Process.GetCurrentProcess().Id);
 
         // Hand the command line arguments over to the sole instance for them to be processed and exit self.
         await DelegateCommandLineArguments(e.Args);
