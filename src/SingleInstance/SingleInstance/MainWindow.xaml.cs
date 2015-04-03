@@ -7,6 +7,8 @@
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
+using System.Windows;
+
 namespace SingleInstance
 {
   /// <summary>
@@ -21,7 +23,8 @@ namespace SingleInstance
     /// </summary>
     public MainWindow()
     {
-      InitializeComponent();
+      this.InitializeComponent();
+      this.DataContext = ((App)Application.Current).CommandLineArgs;
     }
 
     #endregion
