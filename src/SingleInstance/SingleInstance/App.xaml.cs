@@ -77,9 +77,7 @@ namespace SingleInstance
       if (createdNew)
       {
         CommandLineArguments.Add(e.Args);
-
-        // ReSharper disable once CSharpWarnings::CS4014
-        MonitorInstances();
+        await MonitorInstances();
       }
       else
       {
