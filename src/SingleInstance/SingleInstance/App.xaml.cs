@@ -15,6 +15,7 @@ using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using log4net;
 
 namespace SingleInstance
 {
@@ -23,23 +24,31 @@ namespace SingleInstance
   /// </summary>
   public partial class App
   {
-    #region Fields
-
-    /// <summary>
-    /// The cancellation token source.
-    /// </summary>
-    private readonly CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-
-    private static Mutex mutex;
-
-    #endregion
-
     #region Constants
 
     /// <summary>
     /// A unique application name for mutex and pipe discovery purposes.
     /// </summary>
     private const String Name = "SingleInstance_A5515652-A588-4B8D-A9DE-49E141A23A78";
+
+    #endregion
+
+    #region Fields
+
+    /// <summary>
+    /// The mutex.
+    /// </summary>
+    private static Mutex mutex;
+
+    /// <summary>
+    /// The cancellation token source.
+    /// </summary>
+    private readonly CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+
+    /// <summary>
+    /// The log.
+    /// </summary>
+    private readonly ILog log = LogManager.GetLogger(typeof(App));
 
     #endregion
 
