@@ -26,7 +26,7 @@ namespace SingleInstance
     #region Constants
 
     /// <summary>
-    /// A unique application name for mutex and pipe discovery purposes.
+    /// A unique application name for pipe discovery purposes.
     /// </summary>
     private const String Name = "SingleInstance_A5515652-A588-4B8D-A9DE-49E141A23A78";
 
