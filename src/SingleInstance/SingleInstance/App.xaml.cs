@@ -39,11 +39,6 @@ namespace SingleInstance
     /// </summary>
     private static readonly ObservableCollection<IEnumerable<String>> CommandLineArguments = new ObservableCollection<IEnumerable<String>>();
 
-    /// <summary>
-    /// The mutex.
-    /// </summary>
-    private static Mutex mutex;
-
     #endregion
 
     #region Properties
@@ -71,55 +66,78 @@ namespace SingleInstance
     /// </param>
     protected override async void OnStartup(StartupEventArgs e)
     {
-      var createdNew = default(Boolean);
-      mutex = new Mutex(true, Name, out createdNew);
+      // Nothing to cancel, monitor the late instances from start to finish.
+      var cancellationToken = CancellationToken.None;
 
-      if (createdNew)
+      // Specifying interval of zero will only work on the local machine, the server will accept the connection immediately.
+      // It will not be enough to work over the network. For that case, choose a low enough interval for humans not to wait too long (100 ms at most), but network to have enough time.
+      if (await ConnectAsClient(e.Args, 0, cancellationToken))
       {
-        CommandLineArguments.Add(e.Args);
-        await MonitorInstances();
-      }
-      else
-      {
-        await DelegateCommandLineArguments(e.Args);
         this.Shutdown();
+        return;
       }
 
+      CommandLineArguments.Add(e.Args);
+      await ConnectAsServer(cancellationToken);
       base.OnStartup(e);
     }
 
     /// <summary>
-    /// Handles the application exit logic.
+    /// Returns a value indicating whether the named pipe client stream succeeded in a connection attempt towards the named pipe server streams and delegated the command line arguments.
     /// </summary>
-    /// <param name="e">
-    /// The event arguments.
+    /// <param name="commandLineArguments">
+    /// The command Line Arguments.
     /// </param>
-    protected override void OnExit(ExitEventArgs e)
+    /// <param name="timeout">
+    /// The timeout.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// The cancellation Token.
+    /// </param>
+    /// <returns>
+    /// A <see cref="Task"/> representing as asynchronous operation.
+    /// </returns>
+    private static async Task<Boolean> ConnectAsClient(IEnumerable<String> commandLineArguments, Int32 timeout, CancellationToken cancellationToken)
     {
-      // Dispose the mutex, never wait-one'd, so no need to release it either.
-      mutex.Dispose();
-      base.OnExit(e);
+      using (var namedPipeClientStream = new NamedPipeClientStream(".", Name, PipeDirection.Out))
+      {
+        try
+        {
+          await namedPipeClientStream.ConnectAsync(timeout, cancellationToken);
+          using (var streamWriter = new StreamWriter(namedPipeClientStream))
+          {
+            foreach (var commandLineArgument in commandLineArguments)
+            {
+              await streamWriter.WriteLineAsync(commandLineArgument);
+            }
+          }
+
+          return true;
+        }
+        catch (TimeoutException timeoutException)
+        {
+          return false;
+        }
+      }
     }
 
     /// <summary>
-    /// Monitors the application instances popping up, failing to acquire the named mutex and reporting the command line arguments to the sole instance.
+    /// Starts a named pipe server stream awaiting named pipe client stream connections and reading delegated command line arguments.
     /// </summary>
+    /// <param name="cancellationToken">
+    /// The cancellation token.
+    /// </param>
     /// <returns>
-    /// A <see cref="Task"/> represents an asynchronous operation.
+    /// A <see cref="Task"/> representing as asynchronous operation.
     /// </returns>
-    private static async Task MonitorInstances()
+    private static async Task ConnectAsServer(CancellationToken cancellationToken)
     {
-      // Create a named pipe server stream that listens to the named pipe clients handing over the command line arguments.
       using (var namedPipeServerStream = new NamedPipeServerStream(Name, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous))
       using (var streamReader = new StreamReader(namedPipeServerStream))
       {
-        // Continue monitors the late instances until the sole instance is shutting down.
         while (true)
         {
-          // Await a client connection.
-          await new TaskFactory().FromAsync(namedPipeServerStream.BeginWaitForConnection, namedPipeServerStream.EndWaitForConnection, null);
-
-          // Collect the command line arguments to something enumerable so the handler can be reused for both original and received command line arguments.
+          await namedPipeServerStream.WaitForConnectionAsync(cancellationToken);
           var commandLineArguments = new List<String>();
           while (!streamReader.EndOfStream)
           {
@@ -128,35 +146,6 @@ namespace SingleInstance
 
           CommandLineArguments.Add(commandLineArguments);
           namedPipeServerStream.Disconnect();
-        }
-      }
-    }
-
-    /// <summary>
-    /// Hands over the command line arguments passed to the current instance to the sole instance running using named pipes.
-    /// </summary>
-    /// <param name="commandLineArguments">
-    /// The command line arguments.
-    /// </param>
-    /// <returns>
-    /// A <see cref="Task"/> representing an asynchronous operation.
-    /// </returns>
-    private static async Task DelegateCommandLineArguments(IEnumerable<String> commandLineArguments)
-    {
-      // Create a named pipe client stream that connects to the named pipe server in the sole instance.
-      using (var namedPipeClientStream = new NamedPipeClientStream(".", Name, PipeDirection.Out))
-      {
-        // Connect to the named pipe server instance.
-        namedPipeClientStream.Connect();
-
-        // Write the command line arguments to the client outward stream a line each.
-        using (var streamWriter = new StreamWriter(namedPipeClientStream))
-        {
-          streamWriter.AutoFlush = true;
-          foreach (var commandLineArgument in commandLineArguments)
-          {
-            await streamWriter.WriteLineAsync(commandLineArgument);
-          }
         }
       }
     }
